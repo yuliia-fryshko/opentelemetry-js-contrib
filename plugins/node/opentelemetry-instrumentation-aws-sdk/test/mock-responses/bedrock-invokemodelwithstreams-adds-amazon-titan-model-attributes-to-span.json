@@ -1,0 +1,37 @@
+[
+    {
+        "scope": "https://bedrock-runtime.us-east-1.amazonaws.com:443",
+        "method": "POST",
+        "path": "/model/amazon.titan-text-lite-v1/invoke-with-response-stream",
+        "body": {
+            "inputText": "\n\nHuman: Hello, I am a human! \n\nAssistant:",
+            "textGenerationConfig": {
+                "maxTokenCount": 10,
+                "temperature": 0.8,
+                "topP": 1,
+                "stopSequences": [
+                    "|"
+                ]
+            }
+        },
+        "status": 403,
+        "response": {
+            "message": "Signature expired: 20250325T235114Z is now earlier than 20250513T131432Z (20250513T131932Z - 5 min.)"
+        },
+        "rawHeaders": [
+            "Date",
+            "Tue, 13 May 2025 13:19:32 GMT",
+            "Content-Type",
+            "application/json",
+            "Content-Length",
+            "114",
+            "Connection",
+            "keep-alive",
+            "x-amzn-RequestId",
+            "7f041df0-17f5-4a8c-91a7-dfcf06e336ef",
+            "x-amzn-ErrorType",
+            "InvalidSignatureException:http://internal.amazon.com/coral/com.amazon.coral.service/"
+        ],
+        "responseIsBinary": false
+    }
+]

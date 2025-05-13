@@ -46,6 +46,8 @@ export class BedrockRuntimeServiceExtension implements ServiceExtension {
         return this.requestPreSpanHookConverse(request, config, diag);
       case 'InvokeModel':
         return this.requestPreSpanHookInvokeModel(request, config, diag);
+      case 'InvokeModelWithResponseStream':
+        return this.requestPreSpanHookInvokeModelStreams(request, config, diag);
     }
 
     return {
@@ -258,6 +260,67 @@ export class BedrockRuntimeServiceExtension implements ServiceExtension {
     };
   }
 
+  private requestPreSpanHookInvokeModelStreams(
+    request: NormalizedRequest,
+    config: AwsSdkInstrumentationConfig,
+    diag: DiagLogger
+  ): RequestMetadata {
+    let spanName: string | undefined;
+    const spanAttributes: Attributes = {
+      [ATTR_GEN_AI_SYSTEM]: GEN_AI_SYSTEM_VALUE_AWS_BEDROCK,
+      // add operation name for InvokeModel API
+    };
+
+    const modelId = request.commandInput?.modelId;
+    if (modelId) {
+      spanAttributes[ATTR_GEN_AI_REQUEST_MODEL] = modelId;
+    }
+
+    if (request.commandInput?.body) {
+      const requestBody = JSON.parse(request.commandInput.body);
+      if (modelId.includes('amazon.titan')) {
+        if (requestBody.textGenerationConfig?.temperature !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_TEMPERATURE] =
+            requestBody.textGenerationConfig.temperature;
+        }
+        if (requestBody.textGenerationConfig?.topP !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_TOP_P] =
+            requestBody.textGenerationConfig.topP;
+        }
+        if (requestBody.textGenerationConfig?.maxTokenCount !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_MAX_TOKENS] =
+            requestBody.textGenerationConfig.maxTokenCount;
+        }
+        if (requestBody.textGenerationConfig?.stopSequences !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] =
+            requestBody.textGenerationConfig.stopSequences;
+        }
+      } else if (modelId.includes('anthropic.claude')) {
+        if (requestBody.max_tokens !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_MAX_TOKENS] =
+            requestBody.max_tokens;
+        }
+        if (requestBody.temperature !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_TEMPERATURE] =
+            requestBody.temperature;
+        }
+        if (requestBody.top_p !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_TOP_P] = requestBody.top_p;
+        }
+        if (requestBody.stop_sequences !== undefined) {
+          spanAttributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] =
+            requestBody.stop_sequences;
+        }
+      }
+    }
+
+    return {
+      spanName,
+      isIncoming: false,
+      spanAttributes,
+    };
+  }
+
   responseHook(
     response: NormalizedResponse,
     span: Span,
@@ -273,6 +336,8 @@ export class BedrockRuntimeServiceExtension implements ServiceExtension {
         return this.responseHookConverse(response, span, tracer, config);
       case 'InvokeModel':
         return this.responseHookInvokeModel(response, span, tracer, config);
+      case 'InvokeModelWithResponseStream':
+        return this.responseHookInvokeModelStreams(response, span, tracer, config);
     }
   }
 
@@ -425,6 +490,64 @@ export class BedrockRuntimeServiceExtension implements ServiceExtension {
         if (responseBody.outputs?.[0]?.stop_reason !== undefined) {
           span.setAttribute(ATTR_GEN_AI_RESPONSE_FINISH_REASONS, [
             responseBody.outputs[0].stop_reason,
+          ]);
+        }
+      }
+    }
+  }
+
+  private async responseHookInvokeModelStreams(
+    response: NormalizedResponse,
+    span: Span,
+    tracer: Tracer,
+    config: AwsSdkInstrumentationConfig
+  ) {
+    const currentModelId = response.request.commandInput?.modelId;
+    if (response.data?.body) {
+      let collected = '';
+      for await (const chunk of response.data?.body) {
+        if (chunk?.chunk.bytes instanceof Uint8Array) {
+          const decoded = Buffer.from(chunk.chunk.bytes).toString();
+          collected += decoded;
+        }
+      }
+
+      const responseBody = JSON.parse(collected);
+
+      if (currentModelId.includes('amazon.titan')) {
+        if (responseBody.inputTextTokenCount !== undefined) {
+          span.setAttribute(
+            ATTR_GEN_AI_USAGE_INPUT_TOKENS,
+            responseBody.inputTextTokenCount
+          );
+        }
+        if (responseBody.totalOutputTextTokenCount !== undefined) {
+          span.setAttribute(
+            ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
+            responseBody.totalOutputTextTokenCount
+          );
+        }
+        if (responseBody.completionReason !== undefined) {
+          span.setAttribute(ATTR_GEN_AI_RESPONSE_FINISH_REASONS, [
+            responseBody.completionReason,
+          ]);
+        }
+      } else if (currentModelId.includes('anthropic.claude')) {
+        if (responseBody.usage?.input_tokens !== undefined) {
+          span.setAttribute(
+            ATTR_GEN_AI_USAGE_INPUT_TOKENS,
+            responseBody.usage.input_tokens
+          );
+        }
+        if (responseBody.usage?.output_tokens !== undefined) {
+          span.setAttribute(
+            ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
+            responseBody.usage.output_tokens
+          );
+        }
+        if (responseBody.stop_reason !== undefined) {
+          span.setAttribute(ATTR_GEN_AI_RESPONSE_FINISH_REASONS, [
+            responseBody.stop_reason,
           ]);
         }
       }

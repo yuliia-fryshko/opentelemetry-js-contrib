@@ -39,6 +39,7 @@ import {
   ConverseCommand,
   ConversationRole,
   InvokeModelCommand,
+  InvokeModelWithResponseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import { AwsCredentialIdentity } from '@aws-sdk/types';
 import * as path from 'path';
@@ -434,6 +435,101 @@ describe('Bedrock', () => {
       const invokeModelSpans: ReadableSpan[] = testSpans.filter(
         (s: ReadableSpan) => {
           return s.name === 'BedrockRuntime.InvokeModel';
+        }
+      );
+      expect(invokeModelSpans.length).toBe(1);
+      expect(invokeModelSpans[0].attributes).toMatchObject({
+        [ATTR_GEN_AI_SYSTEM]: GEN_AI_SYSTEM_VALUE_AWS_BEDROCK,
+        [ATTR_GEN_AI_REQUEST_MODEL]: modelId,
+        [ATTR_GEN_AI_REQUEST_MAX_TOKENS]: 10,
+        [ATTR_GEN_AI_REQUEST_TEMPERATURE]: 0.8,
+        [ATTR_GEN_AI_REQUEST_TOP_P]: 1,
+        [ATTR_GEN_AI_REQUEST_STOP_SEQUENCES]: ['|'],
+        [ATTR_GEN_AI_USAGE_INPUT_TOKENS]: 8,
+        [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]: 10,
+        [ATTR_GEN_AI_RESPONSE_FINISH_REASONS]: ['max_tokens'],
+      });
+    });
+  });
+
+  describe('InvokeModelWithStreams', () => {
+    it('adds amazon titan model attributes to span', async () => {
+      const modelId = 'amazon.titan-text-lite-v1';
+      const inputText = '\n\nHuman: Hello, I am a human! \n\nAssistant:';
+      const textGenerationConfig = {
+        maxTokenCount: 10,
+        temperature: 0.8,
+        topP: 1,
+        stopSequences: ['|'],
+      };
+      const body: any = {
+        inputText,
+        textGenerationConfig,
+      };
+
+      const command = new InvokeModelWithResponseStreamCommand({
+        modelId,
+        body: JSON.stringify(body),
+      });
+
+      await client.send(command);
+
+      const testSpans: ReadableSpan[] = getTestSpans();
+      const invokeModelSpans: ReadableSpan[] = testSpans.filter(
+        (s: ReadableSpan) => {
+          return s.name === 'BedrockRuntime.InvokeModelWithResponseStream';
+        }
+      );
+      expect(invokeModelSpans.length).toBe(1);
+      expect(invokeModelSpans[0].attributes).toMatchObject({
+        [ATTR_GEN_AI_SYSTEM]: GEN_AI_SYSTEM_VALUE_AWS_BEDROCK,
+        [ATTR_GEN_AI_REQUEST_MODEL]: modelId,
+        [ATTR_GEN_AI_REQUEST_MAX_TOKENS]: 10,
+        [ATTR_GEN_AI_REQUEST_TEMPERATURE]: 0.8,
+        [ATTR_GEN_AI_REQUEST_TOP_P]: 1,
+        [ATTR_GEN_AI_REQUEST_STOP_SEQUENCES]: ['|'],
+        [ATTR_GEN_AI_USAGE_INPUT_TOKENS]: 13,
+        [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]: 10,
+        [ATTR_GEN_AI_RESPONSE_FINISH_REASONS]: ['max_tokens'],
+      });
+    });
+    it('adds claude model attributes to span', async () => {
+      const modelId = 'anthropic.claude-3-5-sonnet-20240620-v1:0';
+      const prompt = '\n\nHuman: Hello, I am a human! \n\nAssistant:';
+
+      const body = {
+        anthropic_version: 'bedrock-2023-05-31',
+        max_tokens: 10,
+        top_k: 250,
+        stop_sequences: ['|'],
+        temperature: 0.8,
+        top_p: 1,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      };
+
+      const command = new InvokeModelWithResponseStreamCommand({
+        modelId,
+        body: JSON.stringify(body),
+        contentType: 'application/json',
+        accept: 'application/json',
+      });
+
+      await client.send(command);
+
+      const testSpans: ReadableSpan[] = getTestSpans();
+      const invokeModelSpans: ReadableSpan[] = testSpans.filter(
+        (s: ReadableSpan) => {
+          return s.name === 'BedrockRuntime.InvokeModelWithResponseStream';
         }
       );
       expect(invokeModelSpans.length).toBe(1);
